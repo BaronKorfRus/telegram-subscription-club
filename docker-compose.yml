@@ -9,6 +9,10 @@ x-logging: &logging
 x-app: &app
   build: .
   env_file: .env
+  environment:
+    CONTENT_DIR: /content
+  volumes:
+    - ${CONTENT_DIR_HOST:-./content}:/content:ro
   restart: unless-stopped
   logging: *logging
   networks:
@@ -86,6 +90,7 @@ services:
       web:
         condition: service_healthy
     environment:
+      CONTENT_DIR: /content
       HEALTHCHECK_URL: http://web:8000/healthz
     networks:
       - internal
