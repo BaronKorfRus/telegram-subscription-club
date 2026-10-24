@@ -1,12 +1,18 @@
 import re
 
 from aiogram import F, Router
+from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy import select
 
 from app import texts
-from app.bot.keyboards import main_reply_keyboard, phone_keyboard, tariff_keyboard
+from app.bot.keyboards import (
+    MENU_LABELS,
+    main_reply_keyboard,
+    phone_keyboard,
+    tariff_keyboard,
+)
 from app.bot.states import Registration
 from app.db import SessionLocal
 from app.models import Client
@@ -16,6 +22,19 @@ registration_router.message.filter(F.chat.type == "private")
 
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@([A-Za-z0-9][-A-Za-z0-9]*\.)+[A-Za-z]{2,}$")
 _PHONE_CLEAN_RE = re.compile(r"[\s()\-]")
+
+
+def is_navigation(text: str | None) -> bool:
+    """Команда или кнопка меню не должны попадать в поля регистрации."""
+    value = (text or "").strip()
+    return value.startswith("/") or value in MENU_LABELS
+
+
+async def skip_navigation(message: Message, state: FSMContext) -> None:
+    """Сбрасывает шаг регистрации и отдаёт update следующему обработчику."""
+    if is_navigation(message.text):
+        await state.clear()
+        raise SkipHandler
 
 
 def is_valid_email(value: str) -> bool:
@@ -69,6 +88,7 @@ async def _finish_phone(message: Message, state: FSMContext, phone: str) -> None
 
 @registration_router.message(Registration.name)
 async def process_name(message: Message, state: FSMContext) -> None:
+    await skip_navigation(message, state)
     first_name, last_name = split_name(message.text or "")
     if not first_name:
         await message.answer(texts.ASK_NAME)
@@ -80,6 +100,7 @@ async def process_name(message: Message, state: FSMContext) -> None:
 
 @registration_router.message(Registration.email)
 async def process_email(message: Message, state: FSMContext) -> None:
+    await skip_navigation(message, state)
     email = (message.text or "").strip().lower()
     if not is_valid_email(email):
         await message.answer(texts.INVALID_EMAIL)
@@ -100,6 +121,7 @@ async def process_contact(message: Message, state: FSMContext) -> None:
 
 @registration_router.message(Registration.phone)
 async def process_phone(message: Message, state: FSMContext) -> None:
+    await skip_navigation(message, state)
     phone = normalize_phone(message.text or "")
     if phone is None:
         await message.answer(texts.INVALID_PHONE)

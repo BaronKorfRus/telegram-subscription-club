@@ -112,22 +112,26 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 
 
 @start_router.message(Command("description"))
-async def cmd_description(message: Message) -> None:
+async def cmd_description(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await message.answer(texts.DESCRIPTION)
 
 
 @start_router.message(Command("questions"))
-async def cmd_questions(message: Message) -> None:
+async def cmd_questions(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await message.answer(texts.FAQ)
 
 
 @start_router.message(Command("rules"))
-async def cmd_rules(message: Message) -> None:
+async def cmd_rules(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await message.answer(texts.RULES)
 
 
 @start_router.message(Command("technical_support"))
-async def cmd_support(message: Message) -> None:
+async def cmd_support(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await message.answer(texts.SUPPORT)
 
 

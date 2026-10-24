@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from aiogram.enums import ChatType
+from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import Chat, ChatJoinRequest, Message, Update, User
 from app import texts
 from app.bot.handlers import join
@@ -333,6 +334,78 @@ async def test_menu_button_during_registration_clears_step(
     assert texts.ASK_EMAIL not in bot.sent[-1][1]
     assert texts.INVALID_EMAIL not in bot.sent[-1][1]
     assert texts.INVALID_PHONE not in bot.sent[-1][1]
+
+
+async def _start_name_step(dispatcher, bot, user_id: int) -> None:
+    await dispatcher.feed_update(
+        bot,
+        _message_update(
+            chat_id=user_id,
+            chat_type=ChatType.PRIVATE,
+            user_id=user_id,
+            text="/start",
+        ),
+    )
+    await dispatcher.feed_update(
+        bot,
+        _message_update(
+            chat_id=user_id,
+            chat_type=ChatType.PRIVATE,
+            user_id=user_id,
+            text="Оформить подписку",
+            message_id=2,
+        ),
+    )
+    assert texts.ASK_NAME in bot.sent[-1][1]
+
+
+async def _fsm_state(dispatcher, bot, user_id: int):
+    key = StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
+    return await dispatcher.storage.get_state(key)
+
+
+async def test_manage_sub_during_name_is_not_saved_as_name(dispatcher):
+    user_id = 960014
+    bot = RecordingBot()
+    await _start_name_step(dispatcher, bot, user_id)
+
+    await dispatcher.feed_update(
+        bot,
+        _message_update(
+            chat_id=user_id,
+            chat_type=ChatType.PRIVATE,
+            user_id=user_id,
+            text="/manage_sub",
+            message_id=3,
+        ),
+    )
+
+    assert texts.SUBSCRIPTION_INACTIVE in bot.sent[-1][1]
+    assert await _fsm_state(dispatcher, bot, user_id) is None
+    with SessionLocal() as session:
+        assert session.scalar(select(Client).where(Client.tg_id == user_id)) is None
+
+
+async def test_support_menu_during_name_is_not_saved_as_name(dispatcher):
+    user_id = 960015
+    bot = RecordingBot()
+    await _start_name_step(dispatcher, bot, user_id)
+
+    await dispatcher.feed_update(
+        bot,
+        _message_update(
+            chat_id=user_id,
+            chat_type=ChatType.PRIVATE,
+            user_id=user_id,
+            text="Поддержка",
+            message_id=3,
+        ),
+    )
+
+    assert texts.SUPPORT in bot.sent[-1][1]
+    assert await _fsm_state(dispatcher, bot, user_id) is None
+    with SessionLocal() as session:
+        assert session.scalar(select(Client).where(Client.tg_id == user_id)) is None
 
 
 async def test_out_of_flow_after_menu_still_notifies_admins(owner, dispatcher):

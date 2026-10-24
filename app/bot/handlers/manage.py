@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -131,7 +132,8 @@ async def show_status(message: Message, tg_id: int) -> None:
 
 
 @manage_router.message(Command("manage_sub"))
-async def cmd_manage_sub(message: Message) -> None:
+async def cmd_manage_sub(message: Message, state: FSMContext) -> None:
+    await state.clear()
     if message.from_user is not None:
         await show_status(message, message.from_user.id)
 

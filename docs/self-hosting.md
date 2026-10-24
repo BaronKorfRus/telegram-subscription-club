@@ -38,7 +38,8 @@
 | `BACKUP_DIR`, `BACKUP_REMOTE` | Каталог бэкапов и необязательный удалённый получатель. |
 | `AMNEZIA_SSH_*`, `TGPROXY_KEY_PATH` | Необязательный SSH-прокси для Telegram. |
 | `SUMMARY_BULK_THRESHOLD` | Порог, после которого сводка считается крупной. |
-| `CONTENT_DIR` | Каталог с `texts.yaml` и `tariffs.yaml`. |
+| `CONTENT_DIR_HOST` | Путь на хосте к каталогу с `texts.yaml` и `tariffs.yaml`; compose монтирует его в `/content`. |
+| `CONTENT_DIR` | Каталог с контентом внутри контейнера; compose задаёт `/content`. Без Docker — `./content`. |
 
 Не коммитьте `.env`, ключи, токены и ID в репозиторий.
 
@@ -51,11 +52,16 @@ cp -r content/example content
 # отредактируйте content/texts.yaml и content/tariffs.yaml
 ```
 
-Укажите в `.env`:
+Укажите в `.env` путь к этому каталогу на хосте:
 
 ```text
-CONTENT_DIR=./content
+CONTENT_DIR_HOST=./content
 ```
+
+`docker-compose.yml` монтирует `${CONTENT_DIR_HOST:-./content}:/content:ro` и
+передаёт сервисам `CONTENT_DIR=/content`. Если `CONTENT_DIR_HOST` не задан,
+используется `./content`. При запуске без Docker укажите в `.env`
+`CONTENT_DIR=./content`.
 
 Формат `tariffs.yaml`:
 
@@ -96,24 +102,23 @@ PY
 
 ### Монтирование контента в Docker
 
-Образ не содержит `content/`, поэтому смонтируйте каталог в контейнеры.
-Создайте `docker-compose.override.yml`:
+Образ не содержит `content/`, поэтому `docker-compose.yml` монтирует каталог
+из `CONTENT_DIR_HOST` в `/content` только для чтения. Отдельный
+`docker-compose.override.yml` не нужен.
 
-```yaml
-services:
-  web:
-    volumes:
-      - ./content:/app/content:ro
-  bot:
-    volumes:
-      - ./content:/app/content:ro
-  billing:
-    volumes:
-      - ./content:/app/content:ro
+Если меняете `CONTENT_DIR_HOST` или содержимое каталога, перезапустите
+сервисы, чтобы они перечитали контент:
+
+```bash
+docker compose up -d web bot billing
 ```
 
-Если вы собираете собственный образ, можно добавить `COPY content ./content`
-в `Dockerfile` и пересобирать образ при изменении контента.
+Для локального запуска достаточно скопировать пример:
+
+```bash
+cp -r content/example content
+CONTENT_DIR_HOST=./content
+```
 
 ## Сети и Caddy
 
@@ -142,7 +147,8 @@ Caddy, а не только в `.env` приложения. Caddy сам пол�
 ```bash
 cp .env.example .env
 cp -r content/example content
-# заполните .env
+# в .env.example уже указан CONTENT_DIR_HOST=./content
+# заполните остальные значения
 docker network create edge 2>/dev/null || true
 docker compose up -d db
 docker compose run --rm web alembic upgrade head

@@ -59,19 +59,11 @@ flowchart LR
 ```bash
 cp .env.example .env
 cp -r content/example content
-# заполните BOT_TOKEN, ID канала и чата, ключи Т-Банка, домен
-# и укажите CONTENT_DIR=./content
-
-# контейнеры не содержат content/ — смонтируем его
-cat > docker-compose.override.yml <<'YAML'
-services:
-  web:
-    volumes: ["./content:/app/content:ro"]
-  bot:
-    volumes: ["./content:/app/content:ro"]
-  billing:
-    volumes: ["./content:/app/content:ro"]
-YAML
+# заполните BOT_TOKEN, ID канала и чата, ключи Т-Банка и домен;
+# CONTENT_DIR_HOST=./content уже указан в .env.example
+#
+# compose сам монтирует ${CONTENT_DIR_HOST:-./content}:/content:ro
+# и задаёт сервисам CONTENT_DIR=/content — override не нужен
 
 # общая сеть для Caddy; если Caddy ещё нет, создайте сеть
 docker network create edge 2>/dev/null || true
@@ -117,9 +109,11 @@ ruff check .
 - `tariffs.yaml` — коды, названия, цены в копейках, сроки и флаги.
 
 В репозитории используется `content/example`. Скопируйте его в `content/`,
-замените тексты и тарифы на свои и укажите `CONTENT_DIR=./content`. Код при
-этом менять не нужно. После изменения тарифов загрузите новые коды в базу —
-команда есть в [docs/self-hosting.md](docs/self-hosting.md).
+замените тексты и тарифы на свои и укажите в `.env`
+`CONTENT_DIR_HOST=./content`: `docker-compose.yml` смонтирует этот каталог в
+`/content`. Код при этом менять не нужно. После изменения тарифов загрузите
+новые коды в базу — команда есть в
+[docs/self-hosting.md](docs/self-hosting.md).
 
 ## Т-Банк
 
@@ -163,7 +157,8 @@ MIT — см. [LICENSE](LICENSE).
 - Один клуб на инстанс; мультитенантности нет.
 - Поддерживается Т-Банк; другие платёжные провайдеры не реализованы.
 - Telegram — единственный интерфейс; веб-кабинета нет.
-- Контент не встроен в Docker-образ: его нужно смонтировать или скопировать.
+- Контент не встроен в Docker-образ: `docker-compose.yml` монтирует каталог
+  из `CONTENT_DIR_HOST` в `/content`.
 - Для тестов нужна отдельная PostgreSQL.
 - Проект не заменяет юридическую и бухгалтерскую проверку: чеки, налоги и
   согласия остаются ответственностью владельца клуба.
