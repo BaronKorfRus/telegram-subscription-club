@@ -1,0 +1,42 @@
+- code: m1_legacy
+  title: 1 месяц
+  price_kopecks: 79000
+  period_days: 30
+  is_legacy: true
+  is_active: false
+  sort_order: 1
+- code: m3_legacy
+  title: 3 месяца
+  price_kopecks: 199000
+  period_days: 90
+  is_legacy: true
+  is_active: false
+  sort_order: 2
+- code: m6_legacy
+  title: 6 месяцев
+  price_kopecks: 390000
+  period_days: 180
+  is_legacy: true
+  is_active: false
+  sort_order: 3
+- code: m1
+  title: 1 месяц
+  price_kopecks: 99000
+  period_days: 30
+  is_legacy: false
+  is_active: true
+  sort_order: 1
+- code: m3
+  title: 3 месяца
+  price_kopecks: 249000
+  period_days: 90
+  is_legacy: false
+  is_active: true
+  sort_order: 2
+- code: m6
+  title: 6 месяцев
+  price_kopecks: 490000
+  period_days: 180
+  is_legacy: false
+  is_active: true
+  sort_order: 3

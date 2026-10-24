@@ -1,0 +1,121 @@
+name: club
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  build: .
+  env_file: .env
+  restart: unless-stopped
+  logging: *logging
+  networks:
+    - internal
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal
+
+  web:
+    <<: *app
+    command: uvicorn app.web.main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      internal: {}
+      edge:
+        aliases:
+          - club-web
+
+  bot:
+    <<: *app
+    command: python -m app.bot.main
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+      - egress
+
+  billing:
+    <<: *app
+    command: python -m app.billing_worker
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+      - edge
+
+  heartbeat:
+    <<: *app
+    command: python -m app.heartbeat
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      HEALTHCHECK_URL: http://web:8000/healthz
+    networks:
+      - internal
+      - edge
+
+  tgproxy:
+    image: alpine:3.20
+    restart: unless-stopped
+    logging: *logging
+    command: >-
+      sh -c "apk add --no-cache openssh-client >/dev/null && mkdir -p /root/.ssh && cp /keys/tgproxy /root/.ssh/id_ed25519 && cp /keys/known_hosts /root/.ssh/known_hosts && chmod 600 /root/.ssh/id_ed25519 /root/.ssh/known_hosts && exec ssh -N -D 0.0.0.0:1080 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts -o ExitOnForwardFailure=yes -p ${AMNEZIA_SSH_PORT:-22} -i /root/.ssh/id_ed25519 ${AMNEZIA_SSH_USER}@${AMNEZIA_SSH_HOST}"
+    volumes:
+      - ${TGPROXY_KEY_PATH:-./secrets/tgproxy}:/keys/tgproxy:ro
+      - ./secrets/tgproxy_known_hosts:/keys/known_hosts:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 1080"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    networks:
+      - internal
+      - edge
+
+networks:
+  internal:
+    internal: true
+  egress: {}
+  edge:
+    external: true
+
+volumes:
+  pgdata:
