@@ -144,6 +144,17 @@ def test_handle_open_sends_tariff_button(session, monkeypatch):
     assert markup_seen[0] is not None
 
 
+def test_texts_use_the_month_of_the_notice(session, notifications, monkeypatch):
+    """В декабре напоминание говорит «декабря», а не «ноября»."""
+    _client(session, 970001)
+    now = datetime(2026, 12, 15, 12, 0, tzinfo=MOSCOW)
+    jobs_list = window_notices.maybe_schedule(session, now)
+    soon = next(job for job in jobs_list if job.type == JobType.window_soon)
+    window_notices.handle_soon(session, soon)
+    assert "декабря" in notifications[0][1]
+    assert "ноября" not in notifications[0][1]
+
+
 def test_handle_open_skips_clients_who_bought_in_the_window(session, notifications):
     # Клиент оплатил 22-го: к моменту рассылки 12:00 у него действующий доступ.
     _client(session, 970001, status=SubscriptionStatus.active)

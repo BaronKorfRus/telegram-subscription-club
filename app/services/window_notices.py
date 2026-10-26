@@ -122,10 +122,16 @@ def recipients(session: Session) -> list[Client]:
     return result
 
 
-def _paywall_text(job_type: str) -> str:
+def _paywall_text(job_type: str, day: date) -> str:
+    """Текст с датой текущего окна, чтобы декабрь не говорил «ноября»."""
+    target = window.window_for(day)
     if job_type == JobType.window_soon.value:
-        return texts.WINDOW_SOON
-    return texts.WINDOW_OPEN
+        return texts.WINDOW_SOON.format(
+            date=window.format_window(window.Window(target.start, target.start))
+        )
+    return texts.WINDOW_OPEN.format(
+        date=window.format_window(window.Window(target.end, target.end))
+    )
 
 
 def _send(session: Session, job: Job, job_type: str) -> int:
@@ -135,7 +141,7 @@ def _send(session: Session, job: Job, job_type: str) -> int:
 
     raw = (job.payload or {}).get("date")
     day = date.fromisoformat(str(raw)) if raw else _now().date()
-    text = _paywall_text(job_type)
+    text = _paywall_text(job_type, day)
     markup = _tariff_button() if job_type == JobType.window_open.value else None
 
     sent = 0
