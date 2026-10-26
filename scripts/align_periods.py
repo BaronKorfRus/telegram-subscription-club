@@ -112,6 +112,24 @@ def apply(session: Session, rows: list[PlanRow], today: date) -> int:
     return changed
 
 
+def ensure_cycles(session: Session) -> int:
+    """Ставит полный цикл всем действующим подпискам, даже уже выровненным.
+
+    Нужно после включения нового расписания: у подписок, которые не меняли
+    дату, задачи могли остаться от старой схемы — без expire_check.
+    """
+    count = 0
+    for subscription in session.scalars(
+        select(Subscription)
+        .where(Subscription.status.in_((SubscriptionStatus.active, SubscriptionStatus.past_due)))
+        .order_by(Subscription.id)
+    ):
+        billing.schedule_cycle(session, subscription)
+        count += 1
+    session.flush()
+    return count
+
+
 def _format_table(rows: list[PlanRow]) -> str:
     if not rows:
         return "Нечего выравнивать: все даты уже на 22-е."
@@ -148,8 +166,9 @@ def main(argv: list[str] | None = None) -> int:
             print("Для записи запустите с ключом --apply.")
             return 0
         changed = apply(session, rows, today)
+        cycles = ensure_cycles(session)
         session.commit()
-    print(f"\nВыровнено подписок: {changed}.")
+    print(f"\nВыровнено подписок: {changed}. Цикл пересоздан у: {cycles}.")
     return 0
 
 

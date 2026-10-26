@@ -130,6 +130,24 @@ def test_apply_returns_number_of_changed_rows(session):
     assert align_periods.apply(session, rows, TODAY) == 2
 
 
+def test_apply_creates_cycle_for_already_aligned_subscription(session):
+    subscription = _subscription(session, 980015, date(2026, 11, 22))
+    rows = align_periods.plan(session, TODAY)
+    assert rows == []
+
+    align_periods.ensure_cycles(session)
+
+    types = {job.type for job in session.query(Job).filter_by(status=JobStatus.pending).all()}
+    assert types == {
+        JobType.charge,
+        JobType.reminder_3d,
+        JobType.reminder_1d,
+        JobType.expire_check,
+    }
+    charge = session.query(Job).filter_by(type=JobType.charge).one()
+    assert charge.payload["subscription_id"] == subscription.id
+
+
 def test_dry_run_is_default(session, monkeypatch, capsys):
     subscription = _subscription(session, 980013, date(2026, 11, 1))
     session.commit()
