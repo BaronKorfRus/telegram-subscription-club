@@ -69,6 +69,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.healthcheck", "bot"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     networks:
       - internal
       - egress
@@ -79,6 +85,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.healthcheck", "billing"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     networks:
       - internal
       - edge
@@ -91,7 +103,21 @@ services:
         condition: service_healthy
     environment:
       CONTENT_DIR: /content
-      HEALTHCHECK_URL: http://web:8000/healthz
+      # club-web — уникальный алиас нашего web в общей сети edge: имя web
+      # там же занято порталом и половина запросов уходила бы туда.
+      HEALTHCHECK_URL: http://club-web:8000/healthz
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://club-web:8000/healthz', timeout=3)",
+        ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - internal
       - edge

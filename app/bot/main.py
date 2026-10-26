@@ -17,6 +17,7 @@ from app.bot.handlers.start import start_router
 from app.bot.middlewares import OutOfFlowMiddleware, PrivateChatMiddleware
 from app.config import settings
 from app.db import SessionLocal
+from app.services import health
 from app.services.messages import ensure_owner
 
 
@@ -42,6 +43,17 @@ async def _on_startup() -> None:
         session.commit()
 
 
+async def _heartbeat_loop() -> None:
+    """Отметка живости для /healthz: пишется из самого процесса бота."""
+    logger = logging.getLogger(__name__)
+    while True:
+        try:
+            await asyncio.to_thread(health.beat_own_session, health.BOT)
+        except Exception:
+            logger.exception("Не удалось записать отметку живости бота")
+        await asyncio.sleep(health.BEAT_INTERVAL_SECONDS)
+
+
 async def main() -> None:
     if not settings.bot_token:
         raise RuntimeError("BOT_TOKEN не задан")
@@ -51,6 +63,7 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         session=session,
     )
+    asyncio.create_task(_heartbeat_loop())
     await create_dispatcher().start_polling(bot)
 
 

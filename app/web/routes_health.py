@@ -7,7 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db import engine
+from app.db import SessionLocal, engine
+from app.services import health as health_service
 
 router = APIRouter()
 
@@ -35,6 +36,7 @@ def healthz() -> JSONResponse:
     db_ok = False
     billing_age_sec = None
     bot_age_sec = None
+    services: dict[str, dict] = {}
 
     try:
         with engine.connect() as conn:
@@ -42,6 +44,8 @@ def healthz() -> JSONResponse:
             db_ok = True
             billing_age_sec = _age_seconds(_max_timestamp(conn, "payment_events", "received_at"))
             bot_age_sec = _age_seconds(_max_timestamp(conn, "messages", "created_at"))
+        with SessionLocal() as session:
+            services = health_service.status(session)
     except SQLAlchemyError:
         db_ok = False
 
@@ -50,10 +54,12 @@ def healthz() -> JSONResponse:
     stale = (
         max_billing_age > 0 and billing_age_sec is not None and billing_age_sec > max_billing_age
     ) or (max_bot_age > 0 and bot_age_sec is not None and bot_age_sec > max_bot_age)
-    healthy = db_ok and not stale
+    services_ok = db_ok and health_service.is_healthy(services)
+    healthy = services_ok and not stale
     payload = {
         "status": "ok" if healthy else "error",
         "db": db_ok,
+        "services": services,
         "billing_age_sec": billing_age_sec,
         "bot_age_sec": bot_age_sec,
     }

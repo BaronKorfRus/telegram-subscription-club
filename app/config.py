@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     summary_bulk_threshold: int = 10
     payment_window_start_day: int = 22
     payment_window_end_day: int = 24
+    health_stale_seconds: int = 180
     tz: str = "Europe/Moscow"
 
 

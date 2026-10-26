@@ -340,3 +340,16 @@ class Admin(Base):
     added_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class ServiceHeartbeat(Base):
+    """Отметка живости фонового сервиса (бот, биллинг).
+
+    Пишется самим процессом раз в 30 секунд; `/healthz` сравнивает отметку
+    с текущим временем и отдаёт 503, если сервис замолчал.
+    """
+
+    __tablename__ = "service_heartbeats"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    beat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

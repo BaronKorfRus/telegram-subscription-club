@@ -17,7 +17,8 @@ def _heartbeat_payload() -> dict:
 def send_heartbeat() -> bool:
     url = os.environ.get("HEARTBEAT_URL", "").strip()
     if not url:
-        logger.warning("HEARTBEAT_URL не задан, хартбит пропущен")
+        # Внешний сторож не настроен: не засоряем лог каждую минуту.
+        logger.debug("HEARTBEAT_URL не задан, хартбит пропущен")
         return False
     token = os.environ.get("HEARTBEAT_TOKEN", "").strip()
     headers = {}
@@ -55,6 +56,10 @@ def run_once() -> bool:
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger.info("heartbeat started, every %ss", POLL_SECONDS)
+    if not os.environ.get("HEARTBEAT_URL", "").strip():
+        logger.warning(
+            "HEARTBEAT_URL не задан: внешний сторож отключён, проверяется только /healthz"
+        )
     while True:
         try:
             run_once()

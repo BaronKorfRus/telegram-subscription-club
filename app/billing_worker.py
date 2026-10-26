@@ -10,7 +10,7 @@ from app import reports
 from app.config import settings
 from app.db import SessionLocal
 from app.models import Job, JobType
-from app.services import billing, jobs, post_payment, reconcile, window_notices
+from app.services import billing, health, jobs, post_payment, reconcile, window_notices
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,8 @@ def run_once(now: datetime | None = None) -> int:
     """Один цикл: забрать задачи, обработать, зафиксировать результат."""
     moment = now or _now()
     with SessionLocal() as session:
+        health.beat(session, health.BILLING, moment)
+        session.commit()
         try:
             window_notices.maybe_schedule(session, moment)
             session.commit()

@@ -32,6 +32,7 @@
 | `PUBLIC_BASE_URL` | Публичный базовый URL сервиса. |
 | `HEARTBEAT_URL` | URL внешнего сторожа. |
 | `HEARTBEAT_TOKEN` | Токен хартбита. |
+| `HEALTH_STALE_SECONDS` | Сколько секунд без отметки живости считается нормой; по умолчанию `180`. |
 | `TZ` | Часовой пояс клуба, по умолчанию `Europe/Moscow`. |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Параметры контейнера PostgreSQL. |
 | `SALEBOT_API_KEY`, `SALEBOT_API_BASE` | Только для миграции из Salebot. |
@@ -296,10 +297,16 @@ gunzip -c ./backups/ИМЯ_ФАЙЛА.sql.gz \
 
 ## Мониторинг
 
-- `/healthz` — доступность приложения и базы.
+- `/healthz` — доступность базы и живость фоновых сервисов. Бот и биллинг раз
+  в 30 секунд пишут отметку в `service_heartbeats`; если отметка старше
+  `HEALTH_STALE_SECONDS` (по умолчанию 180), ответ будет `503` с указанием,
+  какой сервис замолчал.
+- Пример ответа: `{"status":"ok","db":true,"services":{"bot":{"ok":true,"age_sec":4},"billing":{"ok":true,"age_sec":7}}}`.
 - `heartbeat` раз в минуту проверяет `/healthz` и отправляет POST на
   `HEARTBEAT_URL` с заголовками `X-Heartbeat-Token` и
-  `Authorization: Bearer <token>`.
+  `Authorization: Bearer <token>`. Внутри общей Docker-сети обращайтесь к web
+  по уникальному имени проекта (`http://club-web:8000/healthz`), а не по
+  общему `web`: это имя может быть занято другим стеком на том же хосте.
 - Внешний сторож должен жить вне этого сервера. Если сигнала нет 3 минуты —
   тревога.
 - Логи: `docker compose logs -f web bot billing heartbeat`.
