@@ -1,4 +1,5 @@
-from datetime import date, datetime, timedelta
+from calendar import monthrange
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete
@@ -35,9 +36,29 @@ def _aware(moment: datetime) -> datetime:
     return moment
 
 
-def _period_end(now: datetime, period_days: int) -> date:
-    """Конец периода: дата фактического списания + календарные дни тарифа."""
-    return _moscow_date(now) + timedelta(days=period_days)
+def _anchor_day() -> int:
+    """День, на который всегда приходится конец периода."""
+    return settings.payment_window_start_day
+
+
+def add_months(day: date, months: int) -> date:
+    """Та же дата через N месяцев с днём, приведённым к 22-му.
+
+    День месяца — из настройки окна (`PAYMENT_WINDOW_START_DAY`), месяц и год —
+    из `day` плюс `months`. Переход через декабрь и февраль — обычная
+    календарная арифметика.
+    """
+    if months < 0:
+        raise ValueError("months не может быть отрицательным")
+    index = day.year * 12 + (day.month - 1) + months
+    year, month = divmod(index, 12)
+    month += 1
+    return date(year, month, min(_anchor_day(), monthrange(year, month)[1]))
+
+
+def _period_end(now: datetime, months: int) -> date:
+    """Конец периода: 22-е месяца оплаты плюс months календарных месяцев."""
+    return add_months(_moscow_date(now), months)
 
 
 def has_access(subscription: Subscription | None, today: date) -> bool:
@@ -63,7 +84,7 @@ def activate(
         tariff=tariff,
         status=SubscriptionStatus.active,
         started_at=_aware(now),
-        current_period_end=_period_end(now, tariff.period_days),
+        current_period_end=_period_end(now, tariff.period_months),
         auto_renew=True,
         billing_enabled=True,
         failed_attempts=0,
@@ -80,13 +101,14 @@ def extend(
     payment: Payment,
     now: datetime,
 ) -> Subscription:
-    """Продлевает от максимума текущего конца периода и даты списания."""
+    """Продлевает от текущего окончания (или forced) на months месяцев."""
     if subscription.forced_period_end is not None:
         subscription.current_period_end = subscription.forced_period_end
         subscription.forced_period_end = None
     else:
-        base = max(subscription.current_period_end, _moscow_date(now))
-        subscription.current_period_end = base + timedelta(days=subscription.tariff.period_days)
+        subscription.current_period_end = add_months(
+            subscription.current_period_end, subscription.tariff.period_months
+        )
     subscription.status = SubscriptionStatus.active
     subscription.failed_attempts = 0
     payment.subscription = subscription

@@ -50,6 +50,10 @@ SCALAR_KEYS = (
     "charge_failed_24h",
     "payment_failed",
     "subscription_expired",
+    "window_closed",
+    "window_soon",
+    "window_open",
+    "window_charge_failed",
 )
 MAPPING_KEYS = ("reminder_3d", "reminder_1d")
 REQUIRED_KEYS = SCALAR_KEYS + MAPPING_KEYS
@@ -64,11 +68,13 @@ TARIFF_FIELDS = (
     "title",
     "price_kopecks",
     "period_days",
+    "period_months",
     "is_legacy",
     "is_active",
     "sort_order",
 )
 TARIFF_PERIODS = (30, 90, 180)
+TARIFF_MONTHS = (1, 3, 6)
 
 
 @dataclass(frozen=True)
@@ -79,6 +85,7 @@ class TariffData:
     title: str
     price_kopecks: int
     period_days: int
+    period_months: int
     is_legacy: bool
     is_active: bool
     sort_order: int
@@ -163,6 +170,9 @@ def _validate_tariffs(data: object, path: Path) -> list[TariffData]:
         period = item["period_days"]
         if not _is_int(period) or period not in TARIFF_PERIODS:
             raise ContentError(f"{where}: 'period_days' должен быть одним из {TARIFF_PERIODS}")
+        months = item["period_months"]
+        if not _is_int(months) or months not in TARIFF_MONTHS:
+            raise ContentError(f"{where}: 'period_months' должен быть одним из {TARIFF_MONTHS}")
         for flag in ("is_legacy", "is_active"):
             if not isinstance(item[flag], bool):
                 raise ContentError(f"{where}: '{flag}' должен быть true или false")
@@ -175,6 +185,7 @@ def _validate_tariffs(data: object, path: Path) -> list[TariffData]:
                 title=title,
                 price_kopecks=price,
                 period_days=period,
+                period_months=months,
                 is_legacy=item["is_legacy"],
                 is_active=item["is_active"],
                 sort_order=sort_order,

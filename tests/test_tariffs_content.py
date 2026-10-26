@@ -11,6 +11,7 @@ VALID_TARIFF = """
   title: 1 месяц
   price_kopecks: 99000
   period_days: 30
+  period_months: 1
   is_legacy: false
   is_active: true
   sort_order: 1
@@ -63,6 +64,20 @@ def test_unsupported_period_is_rejected(tmp_path, monkeypatch):
         content.load_tariffs()
 
 
+def test_missing_period_months_is_rejected(tmp_path, monkeypatch):
+    _write(tmp_path, monkeypatch, VALID_TARIFF.replace("  period_months: 1\n", ""))
+
+    with pytest.raises(ContentError, match="period_months"):
+        content.load_tariffs()
+
+
+def test_unsupported_period_months_is_rejected(tmp_path, monkeypatch):
+    _write(tmp_path, monkeypatch, VALID_TARIFF.replace("period_months: 1", "period_months: 2"))
+
+    with pytest.raises(ContentError, match="period_months"):
+        content.load_tariffs()
+
+
 def test_seed_uses_tariffs_from_content(tmp_path, monkeypatch, session):
     _write(tmp_path, monkeypatch, VALID_TARIFF.replace("m1", "custom").replace("99000", "12345"))
 
@@ -71,3 +86,4 @@ def test_seed_uses_tariffs_from_content(tmp_path, monkeypatch, session):
     row = session.query(Tariff).filter_by(code="custom").one()
     assert row.price_kopecks == 12345
     assert row.period_days == 30
+    assert row.period_months == 1

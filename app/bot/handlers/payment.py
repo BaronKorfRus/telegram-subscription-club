@@ -32,6 +32,9 @@ async def choose_tariff(callback: CallbackQuery, state: FSMContext) -> None:
 
         try:
             _payment, payment_url = payments.create_tariff_payment(session, client, code)
+        except payments.WindowClosedError as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
         except payments.PaymentError:
             logger.exception("Не удалось создать платёж для tg_id=%s", client.tg_id)
             await callback.answer("Не удалось создать платёж, попробуйте ещё раз", show_alert=True)

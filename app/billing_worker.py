@@ -10,7 +10,7 @@ from app import reports
 from app.config import settings
 from app.db import SessionLocal
 from app.models import Job, JobType
-from app.services import billing, jobs, post_payment, reconcile
+from app.services import billing, jobs, post_payment, reconcile, window_notices
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,9 @@ HANDLERS: dict[str, Callable[[Session, Job], None]] = {
     "daily_report": reports.handle_job,
     "kick": billing.handle_kick,
     "expire": billing.handle_job,
+    "expire_check": billing.handle_expire_check,
+    "window_soon": window_notices.handle_soon,
+    "window_open": window_notices.handle_open,
     "reconcile": reconcile.handle_job,
 }
 
@@ -80,8 +83,15 @@ def bootstrap(now: datetime | None = None) -> Job:
 
 def run_once(now: datetime | None = None) -> int:
     """Один цикл: забрать задачи, обработать, зафиксировать результат."""
+    moment = now or _now()
     with SessionLocal() as session:
-        claimed = jobs.claim(session, now or _now())
+        try:
+            window_notices.maybe_schedule(session, moment)
+            session.commit()
+        except Exception:
+            logger.exception("billing_worker: не удалось поставить напоминания окна")
+            session.rollback()
+        claimed = jobs.claim(session, moment)
         # Локи снимаются сразу: внешние вызовы не держат транзакцию.
         session.commit()
         for job in claimed:

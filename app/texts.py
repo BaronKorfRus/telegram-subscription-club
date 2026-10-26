@@ -45,6 +45,10 @@ _KEY_MAP = {
     "CHARGE_FAILED_24H": "charge_failed_24h",
     "PAYMENT_FAILED": "payment_failed",
     "SUBSCRIPTION_EXPIRED": "subscription_expired",
+    "WINDOW_CLOSED": "window_closed",
+    "WINDOW_SOON": "window_soon",
+    "WINDOW_OPEN": "window_open",
+    "WINDOW_CHARGE_FAILED": "window_charge_failed",
 }
 __all__ = tuple(_KEY_MAP)
 

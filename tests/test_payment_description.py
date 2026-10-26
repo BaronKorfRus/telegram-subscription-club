@@ -4,7 +4,9 @@ from app.services import payments
 
 
 def _tariff(title: str = "1 месяц") -> Tariff:
-    return Tariff(code="m1", title=title, price_kopecks=99000, period_days=30)
+    return Tariff(
+        code="m1", title=title, price_kopecks=99000, period_days=30, period_months=1
+    )
 
 
 def test_payment_description_uses_content(monkeypatch):

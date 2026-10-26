@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     heartbeat_url: str | None = None
     heartbeat_token: str | None = None
     summary_bulk_threshold: int = 10
+    payment_window_start_day: int = 22
+    payment_window_end_day: int = 24
     tz: str = "Europe/Moscow"
 
 

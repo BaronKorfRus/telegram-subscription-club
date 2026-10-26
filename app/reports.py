@@ -26,7 +26,7 @@ from app.services import jobs
 from app.services import messages as messages_service
 
 logger = logging.getLogger(__name__)
-NEXT_DATES = (date(2026, 11, 22), date(2027, 1, 22))
+UPCOMING_DATES_LIMIT = 2
 
 
 def _tz() -> ZoneInfo:
@@ -103,19 +103,33 @@ def _retry_jobs(session: Session, failed: list[Payment]) -> list[Job]:
     )
 
 
-def _next_date_counts(session: Session) -> dict[date, int]:
+def _plan_end():
+    """Дата окончания подписки: forced_period_end, иначе current_period_end."""
+    return func.coalesce(Subscription.forced_period_end, Subscription.current_period_end)
+
+
+def upcoming_dates(session: Session) -> list[date]:
+    """Две ближайшие даты окончания действующих подписок — из базы, без констант."""
+    rows = session.scalars(
+        select(_plan_end())
+        .where(Subscription.status.in_((SubscriptionStatus.active, SubscriptionStatus.past_due)))
+        .group_by(_plan_end())
+        .order_by(_plan_end())
+        .limit(UPCOMING_DATES_LIMIT)
+    )
+    return list(rows)
+
+
+def _next_date_counts(session: Session, days: list[date]) -> dict[date, int]:
+    if not days:
+        return {}
     rows = session.execute(
-        select(
-            func.coalesce(Subscription.forced_period_end, Subscription.current_period_end),
-            func.count(Subscription.id),
-        )
+        select(_plan_end(), func.count(Subscription.id))
         .where(
             Subscription.status.in_((SubscriptionStatus.active, SubscriptionStatus.past_due)),
-            func.coalesce(Subscription.forced_period_end, Subscription.current_period_end).in_(
-                NEXT_DATES
-            ),
+            _plan_end().in_(days),
         )
-        .group_by(func.coalesce(Subscription.forced_period_end, Subscription.current_period_end))
+        .group_by(_plan_end())
     )
     return {row[0]: row[1] for row in rows}
 
@@ -137,7 +151,8 @@ def build_daily_summary(session: Session, day: date) -> str:
     confirmed = _confirmed_payments(session, day)
     failed = _failed_payments(session, day)
     retries = _retry_jobs(session, failed)
-    date_counts = _next_date_counts(session)
+    upcoming = upcoming_dates(session)
+    date_counts = _next_date_counts(session, upcoming)
     delivery_errors = _delivery_errors(session, day)
 
     total = sum(payment.amount_kopecks for payment in confirmed)
@@ -159,11 +174,11 @@ def build_daily_summary(session: Session, day: date) -> str:
     else:
         lines.append("Повторных попыток нет.")
 
-    lines.append(
-        "Следующая плановая дата: "
-        f"{_format_date(NEXT_DATES[0])} — {date_counts.get(NEXT_DATES[0], 0)}, "
-        f"{_format_date(NEXT_DATES[1])} — {date_counts.get(NEXT_DATES[1], 0)}."
-    )
+    if upcoming:
+        plan = ", ".join(
+            f"{_format_date(end)} — {date_counts.get(end, 0)}" for end in upcoming
+        )
+        lines.append(f"Следующая плановая дата: {plan}.")
     if delivery_errors:
         lines.append(f"Ошибки доставки сообщений: {delivery_errors}.")
     return "\n".join(lines)

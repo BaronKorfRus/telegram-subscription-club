@@ -65,6 +65,9 @@ class JobType(StrEnum):
     post_payment = "post_payment"
     payment_failed = "payment_failed"
     daily_report = "daily_report"
+    expire_check = "expire_check"
+    window_soon = "window_soon"
+    window_open = "window_open"
 
 
 class MessageDirection(StrEnum):
@@ -125,6 +128,7 @@ class Tariff(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     price_kopecks: Mapped[int] = mapped_column(Integer, nullable=False)
     period_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_months: Mapped[int] = mapped_column(Integer, nullable=False)
     is_legacy: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=false(), nullable=False
     )

@@ -2,6 +2,7 @@
   title: 1 месяц
   price_kopecks: 79000
   period_days: 30
+  period_months: 1
   is_legacy: true
   is_active: false
   sort_order: 1
@@ -9,6 +10,7 @@
   title: 3 месяца
   price_kopecks: 199000
   period_days: 90
+  period_months: 3
   is_legacy: true
   is_active: false
   sort_order: 2
@@ -16,6 +18,7 @@
   title: 6 месяцев
   price_kopecks: 390000
   period_days: 180
+  period_months: 6
   is_legacy: true
   is_active: false
   sort_order: 3
@@ -23,6 +26,7 @@
   title: 1 месяц
   price_kopecks: 99000
   period_days: 30
+  period_months: 1
   is_legacy: false
   is_active: true
   sort_order: 1
@@ -30,6 +34,7 @@
   title: 3 месяца
   price_kopecks: 249000
   period_days: 90
+  period_months: 3
   is_legacy: false
   is_active: true
   sort_order: 2
@@ -37,6 +42,7 @@
   title: 6 месяцев
   price_kopecks: 490000
   period_days: 180
+  period_months: 6
   is_legacy: false
   is_active: true
   sort_order: 3

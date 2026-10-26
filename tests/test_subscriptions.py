@@ -114,7 +114,8 @@ def test_extend_from_charge_date_when_period_already_over(session, client, tarif
     renewal = _payment(session, client, "order-overdue-2", tariff_m1.price_kopecks)
     extend(session, sub, renewal, now)
 
-    assert sub.current_period_end == date(2026, 11, 23)
+    # Месячный период считается от текущего окончания и всегда падает на 22-е.
+    assert sub.current_period_end == date(2026, 11, 22)
 
 
 def test_cancel_disables_renewal_and_keeps_access_until_period_end(session, client, tariff_m1):
@@ -185,5 +186,6 @@ def test_extend_uses_forced_period_end_and_clears_it(session, client, tariff_m1)
 
     extend(session, sub, renewal, now)
 
+    # forced_period_end — абсолютная дата окончания (якорь 22-го), не база для months.
     assert sub.current_period_end == date(2026, 11, 22)
     assert sub.forced_period_end is None

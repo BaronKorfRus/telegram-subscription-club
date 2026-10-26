@@ -147,6 +147,54 @@ def _add_confirmed(session, subscription: Subscription, count: int) -> None:
         _payment(session, subscription, index=index)
 
 
+def test_upcoming_dates_returns_two_earliest_from_data(session):
+    _subscription(session, 990201, period_end=date(2027, 1, 22), tariff_code="m3")
+    _subscription(session, 990202, period_end=date(2026, 11, 22))
+    _subscription(session, 990203, period_end=date(2027, 2, 22))
+
+    assert reports.upcoming_dates(session) == [date(2026, 11, 22), date(2027, 1, 22)]
+
+
+def test_upcoming_dates_prefers_forced_period_end(session):
+    _subscription(session, 990204, period_end=date(2026, 10, 30), forced_end=date(2026, 11, 22))
+
+    assert reports.upcoming_dates(session) == [date(2026, 11, 22)]
+
+
+def test_upcoming_dates_ignores_cancelled_and_expired(session):
+    cancelled = _subscription(session, 990205, period_end=date(2026, 11, 22))
+    cancelled.status = SubscriptionStatus.cancelled
+    expired = _subscription(session, 990206, period_end=date(2026, 12, 22))
+    expired.status = SubscriptionStatus.expired
+    _subscription(session, 990207, period_end=date(2027, 1, 22))
+    session.flush()
+
+    assert reports.upcoming_dates(session) == [date(2027, 1, 22)]
+
+
+def test_upcoming_dates_empty_without_subscriptions(session):
+    assert reports.upcoming_dates(session) == []
+
+
+def test_summary_uses_dates_from_data_not_constants(session):
+    _subscription(session, 990208, period_end=date(2026, 12, 22))
+    _subscription(session, 990209, period_end=date(2027, 3, 22), tariff_code="m3")
+
+    summary = reports.build_daily_summary(session, DAY)
+
+    assert "Следующая плановая дата: 22.12.2026 — 1, 22.03.2027 — 1." in summary
+
+
+def test_summary_omits_plan_block_without_subscriptions(session):
+    summary = reports.build_daily_summary(session, DAY)
+
+    assert "Следующая плановая дата" not in summary
+
+
+def test_no_hardcoded_next_dates_constant():
+    assert not hasattr(reports, "NEXT_DATES")
+
+
 def test_maybe_schedule_small_batch_in_ten_minutes(session):
     subscription = _subscription(session, 990011)
     _add_confirmed(session, subscription, 9)

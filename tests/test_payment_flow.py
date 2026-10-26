@@ -30,6 +30,7 @@ from sqlalchemy import select, text
 
 MOSCOW = ZoneInfo("Europe/Moscow")
 TODAY = date(2026, 10, 23)
+NOW = datetime(2026, 10, 23, 12, 0, tzinfo=MOSCOW)
 TERMINAL_KEY = "TestTerminal"
 PASSWORD = "test-password"
 NOTIFICATION_URL = "https://callback.example/tbank/notify"
@@ -130,7 +131,9 @@ def test_legacy_client_keeps_legacy_price(session, legacy_subscription):
 def test_create_payment_sends_correct_init(session, new_client, tariff_m1):
     route = respx.post(f"{tbank.BASE_URL}/Init").mock(return_value=_init_ok())
 
-    payment, payment_url = create_payment(session, new_client, tariff_m1, PaymentKind.initial)
+    payment, payment_url = create_payment(
+        session, new_client, tariff_m1, PaymentKind.initial, now=NOW
+    )
 
     body = json.loads(route.calls.last.request.content)
     assert body["TerminalKey"] == TERMINAL_KEY
@@ -169,7 +172,7 @@ def test_init_runs_after_payment_row_is_committed(session, new_client, tariff_m1
 
     respx.post(f"{tbank.BASE_URL}/Init").mock(side_effect=inspect_then_respond)
 
-    payment, _ = create_payment(session, new_client, tariff_m1, PaymentKind.initial)
+    payment, _ = create_payment(session, new_client, tariff_m1, PaymentKind.initial, now=NOW)
 
     assert observed == {
         "exists": True,
@@ -190,6 +193,7 @@ def test_legacy_renewal_payment_uses_old_price(session, legacy_subscription):
         legacy_subscription.tariff,
         PaymentKind.renewal,
         subscription=legacy_subscription,
+        now=NOW,
     )
 
     body = json.loads(route.calls.last.request.content)
@@ -254,7 +258,7 @@ def test_init_error_keeps_rejected_payment(session, new_client, tariff_m1):
     )
 
     with pytest.raises(PaymentError):
-        create_payment(session, new_client, tariff_m1, PaymentKind.initial)
+        create_payment(session, new_client, tariff_m1, PaymentKind.initial, now=NOW)
 
     body = json.loads(route.calls.last.request.content)
     session.expire_all()
@@ -273,7 +277,7 @@ def test_init_without_payment_url_keeps_rejected_payment(session, new_client, ta
     )
 
     with pytest.raises(PaymentError):
-        create_payment(session, new_client, tariff_m1, PaymentKind.initial)
+        create_payment(session, new_client, tariff_m1, PaymentKind.initial, now=NOW)
 
     body = json.loads(route.calls.last.request.content)
     session.expire_all()
@@ -289,7 +293,7 @@ def test_network_error_keeps_rejected_payment(session, new_client, tariff_m1):
     route = respx.post(f"{tbank.BASE_URL}/Init").mock(side_effect=httpx.ConnectError("no route"))
 
     with pytest.raises(PaymentError):
-        create_payment(session, new_client, tariff_m1, PaymentKind.initial)
+        create_payment(session, new_client, tariff_m1, PaymentKind.initial, now=NOW)
 
     body = json.loads(route.calls.last.request.content)
     session.expire_all()

@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -20,7 +20,7 @@ from app.models import (
     SubscriptionStatus,
     Tariff,
 )
-from app.services import jobs, post_payment, subscriptions
+from app.services import jobs, post_payment, subscriptions, window
 from app.tbank import check_token
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,14 @@ logger = logging.getLogger(__name__)
 
 class PaymentError(RuntimeError):
     """Не удалось создать платёж в Т-Банке."""
+
+
+class WindowClosedError(PaymentError):
+    """Оплата подписки закрыта вне окна 22–24."""
+
+    def __init__(self, window_start: window.Window) -> None:
+        self.window = window_start
+        super().__init__(texts.WINDOW_CLOSED.format(date=window.format_window(window_start)))
 
 
 def _today() -> date:
@@ -102,8 +110,13 @@ def create_payment(
     amount_kopecks: int | None = None,
     description: str | None = None,
     receipt: dict | None = None,
+    now: datetime | None = None,
 ) -> tuple[Payment, str]:
     payment_kind = kind if isinstance(kind, PaymentKind) else PaymentKind(kind)
+    if payment_kind != PaymentKind.card_change:
+        moment = now or _now()
+        if not window.is_open(moment):
+            raise WindowClosedError(window.next_window(moment))
     order_id = f"{client.tg_id}-{uuid4().hex[:10]}"
     amount = tariff.price_kopecks if amount_kopecks is None else amount_kopecks
     payment_receipt = (
@@ -166,13 +179,24 @@ def create_payment(
     return payment, str(payment_url)
 
 
+def _window_moment(today: date | None, now: datetime | None) -> datetime:
+    """Момент для проверки окна: явный now, иначе полдень явной даты, иначе сейчас."""
+    if now is not None:
+        return now
+    if today is not None:
+        return datetime.combine(today, time(hour=12), tzinfo=ZoneInfo(settings.tz))
+    return _now()
+
+
 def create_tariff_payment(
     session: Session,
     client: Client,
     code: str,
     today: date | None = None,
+    now: datetime | None = None,
 ) -> tuple[Payment, str]:
     """Платёж по кнопке тарифа: открытую подписку продлеваем, иную — создаём."""
+    moment = _window_moment(today, now)
     subscription = open_subscription(session, client, today)
     if subscription is not None and subscription.tariff is not None:
         if subscription.tariff.code != code:
@@ -183,16 +207,22 @@ def create_tariff_payment(
             subscription.tariff,
             PaymentKind.renewal,
             subscription=subscription,
+            now=moment,
         )
 
     tariff = next((t for t in offered_tariffs(session, client, today) if t.code == code), None)
     if tariff is None:
         raise PaymentError("Тариф недоступен")
-    return create_payment(session, client, tariff, PaymentKind.initial)
+    return create_payment(session, client, tariff, PaymentKind.initial, now=moment)
 
 
 def _now() -> datetime:
-    return datetime.now(ZoneInfo("Europe/Moscow"))
+    return datetime.now(ZoneInfo(settings.tz))
+
+
+def is_payment_open(now: datetime | None = None) -> bool:
+    """Тонкая обёртка над window.is_open; нужна хендлерам и тестам."""
+    return window.is_open(now or _now())
 
 
 def _as_int(value: object) -> int | None:

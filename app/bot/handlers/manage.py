@@ -217,6 +217,9 @@ async def cb_renew(callback: CallbackQuery) -> None:
             _payment, payment_url = payments.create_tariff_payment(
                 session, client, subscription.tariff.code
             )
+        except payments.WindowClosedError as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
         except payments.PaymentError:
             logger.exception("Не удалось продлить подписку tg_id=%s", client.tg_id)
             await callback.answer("Не удалось создать платёж", show_alert=True)

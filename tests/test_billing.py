@@ -165,12 +165,17 @@ def test_charge_extends_and_schedules_next_cycle(session, due_sub, bank):
         JobType.reminder_3d,
         JobType.reminder_1d,
         JobType.charge,
+        JobType.expire_check,
     }
     runs = {job.type: job.run_at for job in cycle}
     assert runs[JobType.reminder_3d] == datetime(2026, 11, 19, 9, 0, tzinfo=MOSCOW)
     assert runs[JobType.reminder_1d] == datetime(2026, 11, 21, 9, 0, tzinfo=MOSCOW)
     assert runs[JobType.charge] == datetime(2026, 11, 22, 9, 0, tzinfo=MOSCOW)
-    assert all(job.payload == {"subscription_id": due_sub.id} for job in cycle)
+    assert runs[JobType.expire_check] == datetime(2026, 11, 25, 0, 5, tzinfo=MOSCOW)
+    assert all(
+        job.payload.get("subscription_id") == due_sub.id
+        for job in cycle
+    )
     assert session.query(Job).filter_by(type=JobType.post_payment).count() == 1
 
 
@@ -208,7 +213,10 @@ def test_timeout_then_get_state_prevents_duplicate(session, due_sub, monkeypatch
     assert due_sub.current_period_end == date(2026, 11, 22)
 
 
-def test_three_failures_expire_and_schedule_kick(session, due_sub, monkeypatch, notifications):
+def test_three_failures_leave_past_due_until_expire_check(
+    session, due_sub, monkeypatch, notifications
+):
+    """Три отказа больше не истекают сразу: доступ живёт до задачи 25-го."""
     fake = FakeBank(
         charge_results=[
             {"Success": False, "ErrorCode": "7", "Message": "Insufficient funds"},
@@ -220,25 +228,34 @@ def test_three_failures_expire_and_schedule_kick(session, due_sub, monkeypatch, 
     monkeypatch.setattr(billing.tbank, "charge", fake.charge)
     monkeypatch.setattr(billing.tbank, "get_state", fake.get_state)
 
-    charge_subscription(session, due_sub, now=NOW)
+    billing.schedule_cycle(session, due_sub)
+    for job in session.query(Job).filter_by(type=JobType.charge).all():
+        job.status = JobStatus.done
+    session.flush()
+
+    def _pending_retry():
+        return session.query(Job).filter_by(type=JobType.charge, status=JobStatus.pending).one()
+
+    charge_subscription(session, due_sub, now=datetime(2026, 10, 22, 9, 0, tzinfo=MOSCOW))
     assert due_sub.status == SubscriptionStatus.past_due
     assert due_sub.failed_attempts == 1
-    retry = session.query(Job).filter_by(type=JobType.charge).one()
-    assert retry.run_at == NOW + timedelta(hours=2)
+    assert _pending_retry().run_at == datetime(2026, 10, 23, 9, 0, tzinfo=MOSCOW)
     assert "через 2 часа" in notifications[-1][1]
 
-    charge_subscription(session, due_sub, now=NOW + timedelta(hours=2))
+    _pending_retry().status = JobStatus.done
+    session.flush()
+    charge_subscription(session, due_sub, now=datetime(2026, 10, 23, 9, 0, tzinfo=MOSCOW))
     assert due_sub.failed_attempts == 2
-    retries = session.query(Job).filter_by(type=JobType.charge).order_by(Job.id).all()
-    assert retries[-1].run_at == NOW + timedelta(hours=26)
-    assert "через 24 часа" in notifications[-1][1]
+    assert _pending_retry().run_at == datetime(2026, 10, 24, 9, 0, tzinfo=MOSCOW)
 
-    charge_subscription(session, due_sub, now=NOW + timedelta(hours=26))
-    assert due_sub.status == SubscriptionStatus.expired
+    _pending_retry().status = JobStatus.done
+    session.flush()
+    charge_subscription(session, due_sub, now=datetime(2026, 10, 24, 9, 0, tzinfo=MOSCOW))
+    # Истечение решает задача expire_check 25-го 00:05, а не третья неудача.
+    assert due_sub.status == SubscriptionStatus.past_due
     assert due_sub.failed_attempts == 3
-    kick = session.query(Job).filter_by(type=JobType.kick).one()
-    assert kick.payload["subscription_id"] == due_sub.id
-    assert "подписка окончена" in notifications[-1][1]
+    assert session.query(Job).filter_by(type=JobType.kick).count() == 0
+    assert texts.WINDOW_CHARGE_FAILED in [text for _tg, text in notifications]
 
     rejected = session.query(Payment).filter_by(status=PaymentStatus.rejected).all()
     assert len(rejected) == 3
@@ -325,7 +342,7 @@ def test_schedule_cycle_is_idempotent(session, due_sub):
     billing.schedule_cycle(session, due_sub)
     billing.schedule_cycle(session, due_sub)
 
-    assert session.query(Job).count() == 3
+    assert session.query(Job).count() == 4
 
 
 def test_post_payment_retries_after_grant_failure(

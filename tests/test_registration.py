@@ -162,6 +162,7 @@ class _FakeMessage:
 
 async def test_finish_phone_shows_persistent_menu(monkeypatch):
     monkeypatch.setattr(registration, "_save_client", lambda *args: None)
+    monkeypatch.setattr(registration, "_payment_open", lambda: True)
     message = _FakeMessage()
     state = _FakeState()
 

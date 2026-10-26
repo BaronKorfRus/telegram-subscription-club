@@ -1,4 +1,6 @@
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.dispatcher.event.bases import SkipHandler
@@ -14,8 +16,19 @@ from app.bot.keyboards import (
     tariff_keyboard,
 )
 from app.bot.states import Registration
+from app.config import settings
 from app.db import SessionLocal
 from app.models import Client
+from app.services import payments, window
+
+
+def _now() -> datetime:
+    return datetime.now(ZoneInfo(settings.tz))
+
+
+def _window_closed_text() -> str:
+    return texts.WINDOW_CLOSED.format(date=window.format_window(window.next_window(_now())))
+
 
 registration_router = Router(name="registration")
 registration_router.message.filter(F.chat.type == "private")
@@ -75,12 +88,22 @@ def _save_client(tg_id: int, username: str | None, data: dict, phone: str) -> No
         session.commit()
 
 
+def _payment_open() -> bool:
+    """Окно оплаты; отдельная функция, чтобы тесты могли её подменить."""
+    return payments.is_payment_open()
+
+
 async def _finish_phone(message: Message, state: FSMContext, phone: str) -> None:
     user = message.from_user
     if user is None:
         return
     data = await state.get_data()
     _save_client(user.id, user.username, data, phone)
+    if not _payment_open():
+        await state.clear()
+        await message.answer(texts.MENU_HINT, reply_markup=main_reply_keyboard())
+        await message.answer(_window_closed_text())
+        return
     await state.set_state(Registration.tariff)
     await message.answer(texts.MENU_HINT, reply_markup=main_reply_keyboard())
     await message.answer(texts.TARIFF_CHOICE, reply_markup=tariff_keyboard())

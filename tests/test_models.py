@@ -25,12 +25,13 @@ def test_tariffs_full_table(session):
     seed_tariffs(session)
     rows = {t.code: t for t in session.query(Tariff).all()}
     expected = {
-        t.code: (t.price_kopecks, t.period_days, t.is_active)
+        t.code: (t.price_kopecks, t.period_days, t.period_months, t.is_active)
         for t in content.load_tariffs()
     }
-    assert {code: (t.price_kopecks, t.period_days, t.is_active) for code, t in rows.items()} == (
-        expected
-    )
+    assert {
+        code: (t.price_kopecks, t.period_days, t.period_months, t.is_active)
+        for code, t in rows.items()
+    } == (expected)
 
 
 def test_seed_is_idempotent(session):
