@@ -1,0 +1,22 @@
+title = "telegram-subscription-club"
+
+# Встроенные правила gitleaks: приватные ключи, пароли, API-ключи и т.п.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram Bot API token"
+regex = '''bot[0-9]{5,}:[A-Za-z0-9_-]{25,}'''
+keywords = ["bot"]
+
+[allowlist]
+description = "Известные тестовые значения и примеры из документации"
+regexes = [
+    '''test-password''',
+    '''123456:TEST''',
+    '''postgres:postgres''',
+    '''club:club''',
+    # SHA-256 тестового payload из tests/test_tbank.py, не секрет.
+    '''1c0964277d0213349243065a0d5b838b8e90d2d25f740d0f2767836e710e80c8''',
+]
